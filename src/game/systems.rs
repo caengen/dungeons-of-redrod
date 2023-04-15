@@ -1,45 +1,39 @@
 use bevy::{math::vec2, prelude::*};
-use bevy_ecs_tilemap::helpers::square_grid::neighbors::Neighbors;
 use bevy_ecs_tilemap::prelude::*;
+use bevy_ggrs::*;
+use bevy_matchbox::{prelude::SingleChannel, MatchboxSocket};
 use rand::Rng;
-use std::{f32::consts::E, time::Duration};
+use std::time::Duration;
 
 use crate::random::Random;
 
 use super::{
-    data::{
-        AnimationIndices, AnimationTimer, Direction, ExampleGameText, Paused, PausedText, Player,
-        Pos, Vel,
-    },
+    data::{AnimationIndices, AnimationTimer, ExampleGameText, GgrsConfig, Player, Pos, Vel},
     effects::Flick,
+    session_data::{INPUT_DOWN, INPUT_LEFT, INPUT_RIGHT, INPUT_UP},
 };
 
-pub fn is_paused(paused: Res<Paused>) -> bool {
-    paused.0
-}
+pub fn ggrs_input(_: In<ggrs::PlayerHandle>, keys: Res<Input<KeyCode>>) -> u8 {
+    let mut input = 0u8;
 
-pub fn pause_controls(
-    keyboard: Res<Input<KeyCode>>,
-    mut paused: ResMut<Paused>,
-    mut pause_texts: Query<(&mut Visibility, With<PausedText>)>,
-) {
-    if keyboard.just_pressed(KeyCode::P) {
-        paused.0 = !paused.0;
+    if keys.any_pressed([KeyCode::Left, KeyCode::A]) {
+        input |= INPUT_LEFT;
+    }
+    if keys.any_pressed([KeyCode::Right, KeyCode::D]) {
+        input |= INPUT_RIGHT;
+    }
+    if keys.any_pressed([KeyCode::Up, KeyCode::W]) {
+        input |= INPUT_UP;
+    }
+    if keys.any_pressed([KeyCode::Down, KeyCode::S]) {
+        input |= INPUT_DOWN;
     }
 
-    if paused.is_changed() {
-        for (mut vis, _) in pause_texts.iter_mut() {
-            match paused.0 {
-                false => *vis = Visibility::Hidden,
-                true => *vis = Visibility::Inherited,
-            }
-        }
-    }
+    input
 }
 
-pub fn game_keys(
-    mut paused: ResMut<Paused>,
-    keyboard: Res<Input<KeyCode>>,
+pub fn move_players(
+    inputs: Res<PlayerInputs<GgrsConfig>>,
     mut player: Query<(
         &Player,
         &mut Transform,
@@ -48,25 +42,27 @@ pub fn game_keys(
         &mut AnimationTimer,
     )>,
 ) {
-    let mut direction = Vec2::ZERO;
+    for (player, mut transform, mut indices, mut sprite, mut timer) in player.iter_mut() {
+        let mut direction = Vec2::ZERO;
 
-    if keyboard.any_pressed([KeyCode::Left, KeyCode::A]) {
-        direction.x -= 1.0;
-    }
-    if keyboard.any_pressed([KeyCode::Right, KeyCode::D]) {
-        direction.x += 1.0;
-    }
-    if keyboard.any_pressed([KeyCode::Up, KeyCode::W]) {
-        direction.y += 1.0;
-    }
-    if keyboard.any_pressed([KeyCode::Down, KeyCode::S]) {
-        direction.y -= 1.0;
-    }
+        let (input, _) = inputs[player.handle];
 
-    let move_speed = 1.0;
-    let move_delta = (direction * move_speed).extend(0.0);
+        if input & INPUT_LEFT != 0 {
+            direction.x -= 1.0;
+        }
+        if input & INPUT_RIGHT != 0 {
+            direction.x += 1.0;
+        }
+        if input & INPUT_UP != 0 {
+            direction.y += 1.0;
+        }
+        if input & INPUT_DOWN != 0 {
+            direction.y -= 1.0;
+        }
 
-    for (_, mut transform, mut indices, mut sprite, mut timer) in player.iter_mut() {
+        let move_speed = 1.0;
+        let move_delta = (direction * move_speed).extend(0.0);
+
         if direction == Vec2::ZERO {
             // update animation
             indices.first = 0;
@@ -82,13 +78,51 @@ pub fn game_keys(
         indices.first = 2;
         indices.last = 3;
         sprite.index = usize::clamp(sprite.index, indices.first, indices.last);
-        if move_delta.x <= 0.0 {
+        if move_delta.x < 0.0 {
             sprite.flip_x = true;
-        } else {
+        } else if move_delta.x > 0.0 {
             sprite.flip_x = false;
         }
         timer.0.set_duration(Duration::from_millis(200));
     }
+}
+
+pub fn wait_for_players(mut commands: Commands, mut socket: ResMut<MatchboxSocket<SingleChannel>>) {
+    if socket.get_channel(0).is_err() {
+        return; // we've already started
+    }
+
+    // check for new connections
+    socket.update_peers();
+    let players = socket.players();
+
+    let num_players = 2;
+    if players.len() < num_players {
+        return; // wait for more players
+    }
+
+    info!("All peers have joined, going in-game");
+
+    // create a GGRS P2P session
+    let mut session_builder = ggrs::SessionBuilder::<GgrsConfig>::new()
+        .with_num_players(num_players)
+        .with_input_delay(2);
+
+    for (i, player) in players.into_iter().enumerate() {
+        session_builder = session_builder
+            .add_player(player, i)
+            .expect("failed to add player");
+    }
+
+    // move the channel out of the socket (required because GGRS takes ownership of it)
+    let channel = socket.take_channel(0).unwrap();
+
+    // start the GGRS session
+    let ggrs_session = session_builder
+        .start_p2p_session(channel)
+        .expect("failed to start session");
+
+    commands.insert_resource(bevy_ggrs::Session::P2PSession(ggrs_session));
 }
 
 pub fn example_setup(
@@ -124,52 +158,58 @@ pub fn example_setup(
             switch_timer: Timer::from_seconds(0.2, TimerMode::Repeating),
         },
     ));
-    commands.spawn((
-        // Create a TextBundle that has a Text with a list of sections.
-        TextBundle::from_sections([TextSection::new(
-            "Paused",
-            TextStyle {
-                font: asset_server.load("fonts/visitor.ttf"),
-                font_size: 20.0,
-                color: Color::WHITE,
-            },
-        )])
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            position: UiRect {
-                left: Val::Px(0.0),
-                right: Val::Px(0.0),
-                ..default()
-            },
-            ..default()
-        }),
-        Vel(vec2(1.0, 1.0)),
-        Pos(vec2(5.0, 15.0)),
-        ExampleGameText,
-        PausedText,
-    ));
 }
 
-pub fn setup_player(
+pub fn spawn_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut rip: ResMut<RollbackIdProvider>,
 ) {
     let idle_handle = asset_server.load("textures/chars/char_atlas.png");
     let idle_atlas =
         TextureAtlas::from_grid(idle_handle, Vec2 { x: 16.0, y: 16.0 }, 4, 1, None, None);
     let texture_atlas_handle = texture_atlases.add(idle_atlas);
     let anim_indices = AnimationIndices { first: 0, last: 1 };
+
+    // Spawn player 1
+    commands.spawn((
+        SpriteSheetBundle {
+            texture_atlas: texture_atlas_handle.clone(),
+            sprite: TextureAtlasSprite::new(0),
+            transform: Transform {
+                translation: Vec3::new(-16., 0., 0.0),
+                scale: Vec3::new(3.0, 3.0, 3.0),
+                ..default()
+            },
+            ..default()
+        },
+        anim_indices.clone(),
+        AnimationTimer(Timer::from_seconds(0.5, TimerMode::Repeating)),
+        Player { handle: 0 },
+        rip.next(),
+    ));
+
+    // Spawn player 2
     commands.spawn((
         SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            sprite: TextureAtlasSprite::new(anim_indices.first),
-            transform: Transform::from_scale(Vec3::splat(6.0)),
+            sprite: TextureAtlasSprite {
+                index: 0,
+                color: Color::rgb(0.5, 0.5, 1.0),
+                ..default()
+            },
+            transform: Transform {
+                translation: Vec3::new(16., 0., 0.0),
+                scale: Vec3::new(3.0, 3.0, 3.0),
+                ..default()
+            },
             ..default()
         },
         anim_indices,
         AnimationTimer(Timer::from_seconds(0.5, TimerMode::Repeating)),
-        Player {},
+        Player { handle: 1 },
+        rip.next(),
     ));
 }
 

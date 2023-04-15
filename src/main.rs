@@ -7,7 +7,9 @@ use bevy::{
     window::PresentMode,
     DefaultPlugins,
 };
+use bevy_ggrs::GGRSPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_matchbox::MatchboxSocket;
 use config::Debug;
 use game::GamePlugin;
 use main_menu::*;
@@ -43,11 +45,12 @@ fn main() {
     });
 
     let mut app = App::new();
+
     app.add_plugins(
         DefaultPlugins
             .set(WindowPlugin {
                 primary_window: Some(Window {
-                    title: "TITLE OF YOUR GAME".into(),
+                    title: "Dungeons of Redrod".into(),
                     resolution: (SCREEN.x, SCREEN.y).into(),
                     present_mode: PresentMode::AutoNoVsync,
                     // Tells wasm to resize the window according to the available canvas
@@ -67,11 +70,11 @@ fn main() {
     .add_state::<AppState>()
     .insert_resource(Debug(cfg.debug))
     .add_plugin(FrameTimeDiagnosticsPlugin::default())
-    .add_plugin(WorldInspectorPlugin::default().run_if(input_toggle_active(true, KeyCode::Escape)))
+    .add_plugin(WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Escape)))
     .add_plugin(RandomPlugin)
     .add_plugin(MainMenuPlugin)
     .add_plugin(GamePlugin)
-    .add_startup_system(setup);
+    .add_startup_systems((setup, start_matchbox_socket));
 
     app.run();
 }
@@ -83,4 +86,10 @@ fn setup(mut commands: Commands) {
         },
         ..default()
     });
+}
+
+fn start_matchbox_socket(mut commands: Commands) {
+    let room_url = "ws://127.0.0.1:3536/dungeons_of_redrod?next=2";
+    info!("connecting to matchbox server: {:?}", room_url);
+    commands.insert_resource(MatchboxSocket::new_ggrs(room_url));
 }

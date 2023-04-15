@@ -1,14 +1,9 @@
 use bevy::prelude::*;
+use bevy_matchbox::prelude::PeerId;
 use derive_more::From;
-
-#[derive(Resource)]
-pub struct Paused(pub bool);
 
 #[derive(Component)]
 pub struct ExampleGameText;
-
-#[derive(Component)]
-pub struct PausedText;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum PhysicsSet {
@@ -25,7 +20,7 @@ pub struct Pos(pub Vec2);
 #[derive(Debug, Component, From)]
 pub struct Bounding(pub f32);
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct AnimationIndices {
     pub first: usize,
     pub last: usize,
@@ -34,11 +29,17 @@ pub struct AnimationIndices {
 #[derive(Component, Deref, DerefMut)]
 pub struct AnimationTimer(pub Timer);
 
-pub enum Direction {
-    Left,
-    Right,
-    Up,
-    Down,
-}
 #[derive(Component)]
-pub struct Player;
+pub struct Player {
+    pub handle: usize,
+}
+
+pub struct GgrsConfig;
+
+impl bevy_ggrs::ggrs::Config for GgrsConfig {
+    // 4-directions + fire fits easinly in a single byte
+    type Input = u8;
+    type State = u8;
+    // Matchbox' WebRtcSocket addresses are called `PeerId`s
+    type Address = PeerId;
+}
