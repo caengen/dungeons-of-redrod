@@ -5,7 +5,9 @@ use bevy_matchbox::{prelude::SingleChannel, MatchboxSocket};
 use rand::Rng;
 use std::time::Duration;
 
-use crate::{game::components::LocalPlayerHandle, random::Random};
+use crate::{
+    game::components::LocalPlayerHandle, random::Random, FontAssets, GameState, ImageAssets,
+};
 
 use super::{
     components::{AnimationIndices, AnimationTimer, ExampleGameText, GgrsConfig, Player, Pos, Vel},
@@ -76,7 +78,11 @@ pub fn move_players(
     }
 }
 
-pub fn wait_for_players(mut commands: Commands, mut socket: ResMut<MatchboxSocket<SingleChannel>>) {
+pub fn wait_for_players(
+    mut commands: Commands,
+    mut socket: ResMut<MatchboxSocket<SingleChannel>>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
     if socket.get_channel(0).is_err() {
         return; // we've already started
     }
@@ -115,11 +121,14 @@ pub fn wait_for_players(mut commands: Commands, mut socket: ResMut<MatchboxSocke
         .expect("failed to start session");
 
     commands.insert_resource(bevy_ggrs::Session::P2PSession(ggrs_session));
+
+    // transition to the state InGame
+    next_state.set(GameState::InGame);
 }
 
 pub fn example_setup(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    fonts: Res<FontAssets>,
     mut rng: Local<Random>,
     mut rip: ResMut<RollbackIdProvider>,
 ) {
@@ -129,7 +138,7 @@ pub fn example_setup(
         TextBundle::from_sections([TextSection::new(
             "~In Game~",
             TextStyle {
-                font: asset_server.load("fonts/visitor.ttf"),
+                font: fonts.visitor.clone(),
                 font_size: 40.0,
                 color: Color::WHITE,
             },
@@ -156,20 +165,15 @@ pub fn example_setup(
 
 pub fn spawn_player(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    images: Res<ImageAssets>,
     mut rip: ResMut<RollbackIdProvider>,
 ) {
-    let idle_handle = asset_server.load("textures/chars/char_atlas.png");
-    let idle_atlas =
-        TextureAtlas::from_grid(idle_handle, Vec2 { x: 16.0, y: 16.0 }, 4, 1, None, None);
-    let texture_atlas_handle = texture_atlases.add(idle_atlas);
     let anim_indices = AnimationIndices { first: 0, last: 1 };
 
     // Spawn player 1
     commands.spawn((
         SpriteSheetBundle {
-            texture_atlas: texture_atlas_handle.clone(),
+            texture_atlas: images.char_idle.clone(),
             sprite: TextureAtlasSprite::new(0),
             transform: Transform {
                 translation: Vec3::new(-16., 0., 0.0),
@@ -187,7 +191,7 @@ pub fn spawn_player(
     // Spawn player 2
     commands.spawn((
         SpriteSheetBundle {
-            texture_atlas: texture_atlas_handle,
+            texture_atlas: images.char_idle.clone(),
             sprite: TextureAtlasSprite {
                 index: 0,
                 color: Color::rgb(0.5, 0.5, 1.0),
@@ -207,7 +211,7 @@ pub fn spawn_player(
     ));
 }
 
-pub fn setup_level(mut commands: Commands, asset_server: Res<AssetServer>) {
+pub fn setup_level(mut commands: Commands) {
     // Size of the tile map in tiles.
     let map_size = TilemapSize { x: 32, y: 32 };
 

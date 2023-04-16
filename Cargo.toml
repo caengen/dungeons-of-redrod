@@ -23,3 +23,4 @@ bevy-inspector-egui = "0.18.0"
 bevy_ecs_tilemap = "0.10"
 bevy_ggrs = { version = "0.12", features = ["wasm-bindgen"] }
 bevy_matchbox = { version = "0.6", features = ["ggrs"] }
+bevy_asset_loader = { version = "0.16.0", features = ["2d"] }

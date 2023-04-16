@@ -7,7 +7,7 @@ use self::{
         teardown, wait_for_players,
     },
 };
-use crate::AppState;
+use crate::GameState;
 use bevy::prelude::*;
 use bevy_ggrs::{GGRSPlugin, GGRSSchedule};
 
@@ -25,15 +25,21 @@ impl Plugin for GamePlugin {
             .register_rollback_component::<Transform>()
             .build(app);
 
-        app.add_systems((example_setup, spawn_player).in_schedule(OnEnter(AppState::InGame)))
-            .add_systems(
-                (move_players, animate_sprite, example_update, flick_system)
-                    .chain()
-                    .in_set(OnUpdate(AppState::InGame))
-                    .in_schedule(GGRSSchedule),
-            )
-            .add_systems((wait_for_players, camera_follow))
-            .configure_set(PhysicsSet::Movement.before(PhysicsSet::CollisionDetection))
-            .add_system(teardown.in_schedule(OnExit(AppState::InGame)));
+        app.add_systems((
+            example_setup.in_schedule(OnEnter(GameState::InGame)),
+            spawn_player.in_schedule(OnEnter(GameState::InGame)),
+        ))
+        .add_systems((
+            wait_for_players.run_if(in_state(GameState::Matchmaking)),
+            camera_follow.run_if(in_state(GameState::InGame)),
+            animate_sprite.run_if(in_state(GameState::InGame)),
+        ))
+        .add_systems(
+            (move_players, example_update, flick_system)
+                .chain()
+                .in_schedule(GGRSSchedule),
+        )
+        .configure_set(PhysicsSet::Movement.before(PhysicsSet::CollisionDetection))
+        .add_system(teardown.in_schedule(OnExit(GameState::InGame)));
     }
 }

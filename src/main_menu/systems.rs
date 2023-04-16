@@ -1,26 +1,26 @@
 use bevy::prelude::*;
 
-use crate::AppState;
+use crate::{FontAssets, GameState};
 
 use super::components::MainMenuText;
 
 pub fn transition_to_game(
-    mut next_state: ResMut<NextState<AppState>>,
+    mut next_state: ResMut<NextState<GameState>>,
     keyboard: Res<Input<KeyCode>>,
 ) {
     if keyboard.pressed(KeyCode::Space) {
-        next_state.set(AppState::InGame);
+        next_state.set(GameState::InGame);
     }
 }
 
-pub fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+pub fn setup(mut commands: Commands, fonts: Res<FontAssets>) {
     // Text with multiple sections
     commands.spawn((
         // Create a TextBundle that has a Text with a list of sections.
         TextBundle::from_sections([TextSection::new(
             "GAME TITLE!",
             TextStyle {
-                font: asset_server.load("fonts/visitor.ttf"),
+                font: fonts.visitor.clone(),
                 font_size: 40.0,
                 color: Color::WHITE,
             },
@@ -42,7 +42,7 @@ pub fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         TextBundle::from_sections([TextSection::new(
             "Press space to continue...",
             TextStyle {
-                font: asset_server.load("fonts/visitor.ttf"),
+                font: fonts.visitor.clone(),
                 font_size: 24.0,
                 color: Color::WHITE,
             },
