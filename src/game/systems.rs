@@ -8,29 +8,10 @@ use std::time::Duration;
 use crate::random::Random;
 
 use super::{
-    data::{AnimationIndices, AnimationTimer, ExampleGameText, GgrsConfig, Player, Pos, Vel},
+    components::{AnimationIndices, AnimationTimer, ExampleGameText, GgrsConfig, Player, Pos, Vel},
     effects::Flick,
-    session_data::{INPUT_DOWN, INPUT_LEFT, INPUT_RIGHT, INPUT_UP},
+    input::direction,
 };
-
-pub fn ggrs_input(_: In<ggrs::PlayerHandle>, keys: Res<Input<KeyCode>>) -> u8 {
-    let mut input = 0u8;
-
-    if keys.any_pressed([KeyCode::Left, KeyCode::A]) {
-        input |= INPUT_LEFT;
-    }
-    if keys.any_pressed([KeyCode::Right, KeyCode::D]) {
-        input |= INPUT_RIGHT;
-    }
-    if keys.any_pressed([KeyCode::Up, KeyCode::W]) {
-        input |= INPUT_UP;
-    }
-    if keys.any_pressed([KeyCode::Down, KeyCode::S]) {
-        input |= INPUT_DOWN;
-    }
-
-    input
-}
 
 pub fn move_players(
     inputs: Res<PlayerInputs<GgrsConfig>>,
@@ -43,23 +24,8 @@ pub fn move_players(
     )>,
 ) {
     for (player, mut transform, mut indices, mut sprite, mut timer) in player.iter_mut() {
-        let mut direction = Vec2::ZERO;
-
         let (input, _) = inputs[player.handle];
-
-        if input & INPUT_LEFT != 0 {
-            direction.x -= 1.0;
-        }
-        if input & INPUT_RIGHT != 0 {
-            direction.x += 1.0;
-        }
-        if input & INPUT_UP != 0 {
-            direction.y += 1.0;
-        }
-        if input & INPUT_DOWN != 0 {
-            direction.y -= 1.0;
-        }
-
+        let direction = direction(input);
         let move_speed = 1.0;
         let move_delta = (direction * move_speed).extend(0.0);
 
@@ -68,7 +34,7 @@ pub fn move_players(
             indices.first = 0;
             indices.last = 1;
             sprite.index = usize::clamp(sprite.index, indices.first, indices.last);
-            timer.0.set_duration(Duration::from_millis(500));
+            timer.0.set_duration(Duration::from_millis(250));
             continue;
         }
 
@@ -83,7 +49,7 @@ pub fn move_players(
         } else if move_delta.x > 0.0 {
             sprite.flip_x = false;
         }
-        timer.0.set_duration(Duration::from_millis(200));
+        timer.0.set_duration(Duration::from_millis(150));
     }
 }
 
@@ -129,6 +95,7 @@ pub fn example_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut rng: Local<Random>,
+    mut rip: ResMut<RollbackIdProvider>,
 ) {
     // Text with multiple sections
     commands.spawn((
@@ -157,6 +124,7 @@ pub fn example_setup(
             duration: Timer::from_seconds(60.0, TimerMode::Once),
             switch_timer: Timer::from_seconds(0.2, TimerMode::Repeating),
         },
+        rip.next(),
     ));
 }
 
@@ -185,7 +153,7 @@ pub fn spawn_player(
             ..default()
         },
         anim_indices.clone(),
-        AnimationTimer(Timer::from_seconds(0.5, TimerMode::Repeating)),
+        AnimationTimer(Timer::from_seconds(0.25, TimerMode::Repeating)),
         Player { handle: 0 },
         rip.next(),
     ));
@@ -207,7 +175,7 @@ pub fn spawn_player(
             ..default()
         },
         anim_indices,
-        AnimationTimer(Timer::from_seconds(0.5, TimerMode::Repeating)),
+        AnimationTimer(Timer::from_seconds(0.25, TimerMode::Repeating)),
         Player { handle: 1 },
         rip.next(),
     ));

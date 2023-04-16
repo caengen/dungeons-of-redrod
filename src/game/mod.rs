@@ -1,9 +1,10 @@
 use self::{
-    data::{GgrsConfig, PhysicsSet},
+    components::{GgrsConfig, PhysicsSet},
     effects::flick_system,
+    input::ggrs_input,
     systems::{
-        animate_sprite, example_setup, example_update, ggrs_input, move_players, spawn_player,
-        teardown, wait_for_players,
+        animate_sprite, example_setup, example_update, move_players, spawn_player, teardown,
+        wait_for_players,
     },
 };
 use crate::AppState;
@@ -11,9 +12,9 @@ use bevy::prelude::*;
 use bevy_ggrs::{GGRSPlugin, GGRSSchedule};
 
 mod collision;
-mod data;
+mod components;
 mod effects;
-mod session_data;
+mod input;
 mod systems;
 
 pub struct GamePlugin;
