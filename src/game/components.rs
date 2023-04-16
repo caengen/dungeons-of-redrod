@@ -34,6 +34,9 @@ pub struct Player {
     pub handle: usize,
 }
 
+#[derive(Resource)]
+pub struct LocalPlayerHandle(pub usize);
+
 pub struct GgrsConfig;
 
 impl bevy_ggrs::ggrs::Config for GgrsConfig {

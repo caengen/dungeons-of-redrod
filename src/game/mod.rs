@@ -3,8 +3,8 @@ use self::{
     effects::flick_system,
     input::ggrs_input,
     systems::{
-        animate_sprite, example_setup, example_update, move_players, spawn_player, teardown,
-        wait_for_players,
+        animate_sprite, camera_follow, example_setup, example_update, move_players, spawn_player,
+        teardown, wait_for_players,
     },
 };
 use crate::AppState;
@@ -32,7 +32,7 @@ impl Plugin for GamePlugin {
                     .in_set(OnUpdate(AppState::InGame))
                     .in_schedule(GGRSSchedule),
             )
-            .add_system(wait_for_players)
+            .add_systems((wait_for_players, camera_follow))
             .configure_set(PhysicsSet::Movement.before(PhysicsSet::CollisionDetection))
             .add_system(teardown.in_schedule(OnExit(AppState::InGame)));
     }

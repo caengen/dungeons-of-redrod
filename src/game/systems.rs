@@ -1,17 +1,40 @@
 use bevy::{math::vec2, prelude::*};
 use bevy_ecs_tilemap::prelude::*;
-use bevy_ggrs::*;
+use bevy_ggrs::{ggrs::PlayerType, *};
 use bevy_matchbox::{prelude::SingleChannel, MatchboxSocket};
 use rand::Rng;
 use std::time::Duration;
 
-use crate::random::Random;
+use crate::{game::components::LocalPlayerHandle, random::Random};
 
 use super::{
     components::{AnimationIndices, AnimationTimer, ExampleGameText, GgrsConfig, Player, Pos, Vel},
     effects::Flick,
     input::direction,
 };
+
+pub fn camera_follow(
+    player_handle: Option<Res<LocalPlayerHandle>>,
+    player_query: Query<(&Player, &Transform)>,
+    mut camera_query: Query<&mut Transform, (With<Camera>, Without<Player>)>,
+) {
+    let player_handle = match player_handle {
+        Some(player_handle) => player_handle.0,
+        None => return, // no local player yet
+    };
+
+    for (player, player_transform) in player_query.iter() {
+        if player.handle != player_handle {
+            continue;
+        }
+
+        let pos = player_transform.translation;
+        for mut camera_transform in camera_query.iter_mut() {
+            camera_transform.translation.x = pos.x;
+            camera_transform.translation.y = pos.y;
+        }
+    }
+}
 
 pub fn move_players(
     inputs: Res<PlayerInputs<GgrsConfig>>,
@@ -75,6 +98,9 @@ pub fn wait_for_players(mut commands: Commands, mut socket: ResMut<MatchboxSocke
         .with_input_delay(2);
 
     for (i, player) in players.into_iter().enumerate() {
+        if player == PlayerType::Local {
+            commands.insert_resource(LocalPlayerHandle(i));
+        }
         session_builder = session_builder
             .add_player(player, i)
             .expect("failed to add player");
