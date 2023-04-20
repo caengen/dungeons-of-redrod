@@ -3,8 +3,8 @@ use self::{
     effects::flick_system,
     input::ggrs_input,
     systems::{
-        animate_sprite, camera_follow, example_setup, example_update, move_players, spawn_player,
-        teardown, wait_for_players,
+        animate_sprite, camera_follow, example_setup, example_update, move_players, setup_level,
+        spawn_player, teardown, wait_for_players,
     },
 };
 use crate::GameState;
@@ -27,6 +27,7 @@ impl Plugin for GamePlugin {
 
         app.add_systems((
             example_setup.in_schedule(OnEnter(GameState::InGame)),
+            setup_level.in_schedule(OnEnter(GameState::InGame)),
             spawn_player.in_schedule(OnEnter(GameState::InGame)),
         ))
         .add_systems((

@@ -211,7 +211,7 @@ pub fn spawn_player(
     ));
 }
 
-pub fn setup_level(mut commands: Commands) {
+pub fn setup_level(mut commands: Commands, images: Res<ImageAssets>) {
     // Size of the tile map in tiles.
     let map_size = TilemapSize { x: 32, y: 32 };
 
@@ -219,27 +219,47 @@ pub fn setup_level(mut commands: Commands) {
     // This component is a grid of tile entities and is used to help keep track of individual
     // tiles in the world. If you have multiple layers of tiles you would have a Tilemap2dStorage
     // component per layer.
+    // Layer 1
     let mut tile_storage = TileStorage::empty(map_size);
-
-    // For the purposes of this example, we consider a tilemap with rectangular tiles.
-    let map_type = TilemapType::Square;
-
     let tilemap_entity = commands.spawn_empty().id();
 
-    // Spawn a 32 by 32 tilemap.
-    // Alternatively, you can use helpers::fill_tilemap.
-    for x in 0..map_size.x {
-        for y in 0..map_size.y {
-            let tile_pos = TilePos { x, y };
-            let tile_entity = commands
-                .spawn(TileBundle {
-                    position: tile_pos,
-                    tilemap_id: TilemapId(tilemap_entity),
-                    ..Default::default()
-                })
-                .id();
-        }
-    }
+    fill_tilemap(
+        TileTextureIndex(10),
+        map_size,
+        TilemapId(tilemap_entity),
+        &mut commands,
+        &mut tile_storage,
+    );
+
+    let tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
+    let grid_size = tile_size.into();
+    let map_type = TilemapType::default();
+
+    commands.entity(tilemap_entity).insert(TilemapBundle {
+        grid_size,
+        map_type,
+        size: map_size,
+        storage: tile_storage,
+        texture: TilemapTexture::Single(images.green_wall.clone()),
+        tile_size,
+        transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
+        ..Default::default()
+    });
+
+    // // Spawn a 32 by 32 tilemap.
+    // // Alternatively, you can use helpers::fill_tilemap.
+    // for x in 0..map_size.x {
+    //     for y in 0..map_size.y {
+    //         let tile_pos = TilePos { x, y };
+    //         let tile_entity = commands
+    //             .spawn(TileBundle {
+    //                 position: tile_pos,
+    //                 tilemap_id: TilemapId(tilemap_entity),
+    //                 ..Default::default()
+    //             })
+    //             .id();
+    //     }
+    // }
 }
 
 pub fn teardown(mut commands: Commands, texts: Query<(Entity, With<ExampleGameText>)>) {

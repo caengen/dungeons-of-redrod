@@ -8,7 +8,7 @@ use bevy::{
     DefaultPlugins,
 };
 use bevy_asset_loader::prelude::{AssetCollection, LoadingState, LoadingStateAppExt};
-use bevy_ggrs::GGRSPlugin;
+use bevy_ecs_tilemap::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_matchbox::MatchboxSocket;
 use config::Debug;
@@ -26,12 +26,15 @@ mod random;
 pub const SCREEN: Vec2 = Vec2::from_array([512.0, 512.0]);
 pub const DARK: Color = Color::rgb(0.191, 0.184, 0.156);
 pub const LIGHT: Color = Color::rgb(0.852, 0.844, 0.816);
+// #[asset(texture_atlas(tile_size_x = 16.0, tile_size_y = 16.0, columns = 7, rows = 3))]
 
 #[derive(AssetCollection, Resource)]
 pub struct ImageAssets {
     #[asset(texture_atlas(tile_size_x = 16.0, tile_size_y = 16.0, columns = 4, rows = 1))]
     #[asset(path = "textures/chars/char_atlas.png")]
     pub char_idle: Handle<TextureAtlas>,
+    #[asset(path = "textures/dungeon.png")]
+    pub green_wall: Handle<Image>,
 }
 
 #[derive(AssetCollection, Resource)]
@@ -50,9 +53,6 @@ pub enum GameState {
     InGame,
 }
 
-/**
- * The configuration for the game loop. For cleanliness
- */
 fn main() {
     // Possibility for program args
     let args: Vec<String> = env::args().skip(1).collect();
@@ -91,6 +91,7 @@ fn main() {
     .add_collection_to_loading_state::<_, ImageAssets>(GameState::AssetLoading)
     .add_collection_to_loading_state::<_, FontAssets>(GameState::AssetLoading)
     .insert_resource(Debug(cfg.debug))
+    .add_plugin(TilemapPlugin)
     .add_plugin(FrameTimeDiagnosticsPlugin::default())
     .add_plugin(WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Escape)))
     .add_plugin(RandomPlugin)
