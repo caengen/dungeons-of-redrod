@@ -3,8 +3,8 @@ use self::{
     effects::flick_system,
     input::ggrs_input,
     systems::{
-        animate_sprite, camera_follow, example_setup, example_update, move_players, setup_level,
-        spawn_player, teardown, wait_for_players,
+        animate_sprite, camera_follow, move_players, setup_level, spawn_player, teardown,
+        wait_for_players,
     },
 };
 use crate::GameState;
@@ -15,6 +15,7 @@ mod collision;
 mod components;
 mod effects;
 mod input;
+mod levels;
 mod systems;
 
 pub struct GamePlugin;
@@ -26,7 +27,6 @@ impl Plugin for GamePlugin {
             .build(app);
 
         app.add_systems((
-            example_setup.in_schedule(OnEnter(GameState::InGame)),
             setup_level.in_schedule(OnEnter(GameState::InGame)),
             spawn_player.in_schedule(OnEnter(GameState::InGame)),
         ))
@@ -36,7 +36,7 @@ impl Plugin for GamePlugin {
             animate_sprite.run_if(in_state(GameState::InGame)),
         ))
         .add_systems(
-            (move_players, example_update, flick_system)
+            (move_players, flick_system)
                 .chain()
                 .in_schedule(GGRSSchedule),
         )

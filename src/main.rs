@@ -11,17 +11,16 @@ use bevy_asset_loader::prelude::{AssetCollection, LoadingState, LoadingStateAppE
 use bevy_ecs_tilemap::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_matchbox::MatchboxSocket;
+use bevy_turborand::prelude::*;
 use config::Debug;
 use game::GamePlugin;
 use main_menu::*;
 use rand::Rng;
-use random::{Random, RandomPlugin};
 use std::{env, process};
 
 mod config;
 mod game;
 mod main_menu;
-mod random;
 
 pub const SCREEN: Vec2 = Vec2::from_array([512.0, 512.0]);
 pub const DARK: Color = Color::rgb(0.191, 0.184, 0.156);
@@ -33,8 +32,8 @@ pub struct ImageAssets {
     #[asset(texture_atlas(tile_size_x = 16.0, tile_size_y = 16.0, columns = 4, rows = 1))]
     #[asset(path = "textures/chars/char_atlas.png")]
     pub char_idle: Handle<TextureAtlas>,
-    #[asset(path = "textures/dungeon.png")]
-    pub green_wall: Handle<Image>,
+    #[asset(path = "textures/atlas.png")]
+    pub atlas: Handle<Image>,
 }
 
 #[derive(AssetCollection, Resource)]
@@ -94,7 +93,7 @@ fn main() {
     .add_plugin(TilemapPlugin)
     .add_plugin(FrameTimeDiagnosticsPlugin::default())
     .add_plugin(WorldInspectorPlugin::default().run_if(input_toggle_active(false, KeyCode::Escape)))
-    .add_plugin(RandomPlugin)
+    .add_plugin(RngPlugin::default())
     .add_plugin(MainMenuPlugin)
     .add_plugin(GamePlugin)
     // todo: consider moving this to a seperate plugin "MatchmakingPlugin"

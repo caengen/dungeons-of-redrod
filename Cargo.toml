@@ -17,10 +17,10 @@ lto = "thin"
 bevy = "0.10"
 bevy_prototype_lyon = "0.6.0"
 getrandom = { version = "0.2.7", features = ["js"] }
-rand = { version = "0.8.5", features = ["small_rng"] }
 derive_more = "0.99.17"
 bevy-inspector-egui = "0.18.0"
 bevy_ecs_tilemap = {version = "0.10", features = ["atlas"]}
 bevy_ggrs = { version = "0.12", features = ["wasm-bindgen"] }
 bevy_matchbox = { version = "0.6", features = ["ggrs"] }
 bevy_asset_loader = { version = "0.16.0", features = ["2d"] }
+bevy_turborand = "0.5.0"

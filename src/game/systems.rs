@@ -2,17 +2,16 @@ use bevy::{math::vec2, prelude::*};
 use bevy_ecs_tilemap::prelude::*;
 use bevy_ggrs::{ggrs::PlayerType, *};
 use bevy_matchbox::{prelude::SingleChannel, MatchboxSocket};
-use rand::Rng;
+use bevy_turborand::{GlobalRng, RngComponent};
 use std::time::Duration;
 
-use crate::{
-    game::components::LocalPlayerHandle, random::Random, FontAssets, GameState, ImageAssets,
-};
+use crate::{game::components::LocalPlayerHandle, FontAssets, GameState, ImageAssets};
 
 use super::{
     components::{AnimationIndices, AnimationTimer, ExampleGameText, GgrsConfig, Player, Pos, Vel},
     effects::Flick,
     input::direction,
+    levels,
 };
 
 pub fn camera_follow(
@@ -126,43 +125,6 @@ pub fn wait_for_players(
     next_state.set(GameState::InGame);
 }
 
-pub fn example_setup(
-    mut commands: Commands,
-    fonts: Res<FontAssets>,
-    mut rng: Local<Random>,
-    mut rip: ResMut<RollbackIdProvider>,
-) {
-    // Text with multiple sections
-    commands.spawn((
-        // Create a TextBundle that has a Text with a list of sections.
-        TextBundle::from_sections([TextSection::new(
-            "~In Game~",
-            TextStyle {
-                font: fonts.visitor.clone(),
-                font_size: 40.0,
-                color: Color::WHITE,
-            },
-        )])
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            position: UiRect {
-                top: Val::Px(5.0),
-                left: Val::Px(15.0),
-                ..default()
-            },
-            ..default()
-        }),
-        Vel(vec2(rng.gen_range(1.0..1.5), rng.gen_range(1.0..1.5))),
-        Pos(vec2(5.0, 15.0)),
-        ExampleGameText,
-        Flick {
-            duration: Timer::from_seconds(60.0, TimerMode::Once),
-            switch_timer: Timer::from_seconds(0.2, TimerMode::Repeating),
-        },
-        rip.next(),
-    ));
-}
-
 pub fn spawn_player(
     mut commands: Commands,
     images: Res<ImageAssets>,
@@ -211,7 +173,11 @@ pub fn spawn_player(
     ));
 }
 
-pub fn setup_level(mut commands: Commands, images: Res<ImageAssets>) {
+pub fn setup_level(
+    mut commands: Commands,
+    images: Res<ImageAssets>,
+    mut global_rng: ResMut<GlobalRng>,
+) {
     // Size of the tile map in tiles.
     let map_size = TilemapSize { x: 32, y: 32 };
 
@@ -222,14 +188,13 @@ pub fn setup_level(mut commands: Commands, images: Res<ImageAssets>) {
     // Layer 1
     let mut tile_storage = TileStorage::empty(map_size);
     let tilemap_entity = commands.spawn_empty().id();
-
-    fill_tilemap(
-        TileTextureIndex(10),
-        map_size,
-        TilemapId(tilemap_entity),
-        &mut commands,
-        &mut tile_storage,
-    );
+    // fill_tilemap(
+    //     TileTextureIndex(10),
+    //     map_size,
+    //     TilemapId(tilemap_entity),
+    //     &mut commands,
+    //     &mut tile_storage,
+    // );
 
     let tile_size = TilemapTileSize { x: 16.0, y: 16.0 };
     let grid_size = tile_size.into();
@@ -240,11 +205,14 @@ pub fn setup_level(mut commands: Commands, images: Res<ImageAssets>) {
         map_type,
         size: map_size,
         storage: tile_storage,
-        texture: TilemapTexture::Single(images.green_wall.clone()),
+        texture: TilemapTexture::Single(images.atlas.clone()),
         tile_size,
         transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
         ..Default::default()
     });
+
+    let mut rng = RngComponent::from(&mut global_rng);
+    levels::cave(&mut rng, &mut commands, &tilemap_entity, &map_size);
 
     // // Spawn a 32 by 32 tilemap.
     // // Alternatively, you can use helpers::fill_tilemap.
@@ -255,6 +223,8 @@ pub fn setup_level(mut commands: Commands, images: Res<ImageAssets>) {
     //             .spawn(TileBundle {
     //                 position: tile_pos,
     //                 tilemap_id: TilemapId(tilemap_entity),
+    //                 texture_index: TileTextureIndex(10),
+
     //                 ..Default::default()
     //             })
     //             .id();
@@ -265,44 +235,6 @@ pub fn setup_level(mut commands: Commands, images: Res<ImageAssets>) {
 pub fn teardown(mut commands: Commands, texts: Query<(Entity, With<ExampleGameText>)>) {
     for (entity, _) in texts.iter() {
         commands.entity(entity).despawn();
-    }
-}
-
-pub fn example_update(
-    window: Query<&Window>,
-    mut texts: Query<(
-        &mut Style,
-        &CalculatedSize,
-        &mut Pos,
-        &mut Vel,
-        With<ExampleGameText>,
-    )>,
-) {
-    let window = window.get_single().unwrap();
-    for (mut style, calculated_size, mut pos, mut vel, _) in texts.iter_mut() {
-        pos.0.y += vel.0.y;
-        pos.0.x += vel.0.x;
-
-        if pos.0.y + calculated_size.size.y > window.height() {
-            pos.0.y = window.height() - calculated_size.size.y;
-            vel.0.y *= -1.0;
-        } else if pos.0.y < 0.0 {
-            pos.0.y = 0.0;
-            vel.0.y *= -1.0;
-        }
-        if pos.0.x + calculated_size.size.x > window.width() {
-            pos.0.x = window.width() - calculated_size.size.x;
-            vel.0.x *= -1.0;
-        } else if pos.0.x < 0.0 {
-            pos.0.x = 0.0;
-            vel.0.x *= -1.0;
-        }
-
-        style.position = UiRect {
-            top: Val::Px(pos.0.y),
-            left: Val::Px(pos.0.x),
-            ..default()
-        };
     }
 }
 
