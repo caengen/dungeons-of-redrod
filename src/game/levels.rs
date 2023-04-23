@@ -1,8 +1,11 @@
+use std::ops::Add;
+
 use bevy::{
     math::vec2,
     prelude::{Commands, Component, Entity, Local, ResMut, Vec2},
 };
 use bevy_ecs_tilemap::{
+    helpers::square_grid::neighbors::{self, Neighbors},
     prelude::{TilemapId, TilemapSize},
     tiles::{TileBundle, TilePos, TileTextureIndex},
     TilemapBundle,
@@ -44,12 +47,12 @@ use bevy_turborand::{DelegatedRng, GlobalRng, RngComponent};
 // rad 33 er 736 .. 758
 
 #[derive(Component, Debug, Clone, PartialEq, Eq)]
-enum CoarseTileType {
+pub enum CoarseTileType {
     Wall,
     Floor,
     Door,
 }
-enum CaveAtlasIndices {
+pub enum CaveAtlasIndices {
     Wall1RightBottomLeft = 0,
     Wall1TopBottomLeft = 1,
     Wall1RightBottom = 2,
@@ -95,6 +98,198 @@ impl Room {
 
         left < right && top < bottom
     }
+}
+
+pub struct Map {
+    pub size: TilemapSize,
+    pub tiles: Vec<CoarseTileType>,
+}
+
+impl Map {
+    pub fn idx_to_vec2(&self, idx: usize) -> Vec2 {
+        Vec2 {
+            x: idx as f32 % self.size.x as f32,
+            y: (idx as f32 / self.size.x as f32).floor(),
+        }
+    }
+
+    pub fn tile_at_pos(&self, pos: TilePos) -> Option<&CoarseTileType> {
+        let idx = pos.to_index(&self.size);
+        if pos.x < 0 || pos.y < 0 || idx >= self.tiles.len() {
+            return None;
+        }
+
+        Some(&self.tiles[idx])
+    }
+}
+
+pub fn is_floor(tile: &CoarseTileType) -> bool {
+    match tile {
+        CoarseTileType::Floor => true,
+        _ => false,
+    }
+}
+
+pub fn is_room(tile: &CoarseTileType) -> bool {
+    match tile {
+        CoarseTileType::Floor | CoarseTileType::Wall => true,
+        _ => false,
+    }
+}
+
+pub fn get_tile_at_pos(map: &Map, pos: TilePos) -> Option<&CoarseTileType> {
+    let idx = pos.to_index(&map.size);
+    map.tiles.get(idx)
+}
+
+pub fn surrounding_tiles(map: &Map, idx: usize) -> Vec<Option<&CoarseTileType>> {
+    let adjecent_vecs = vec![
+        vec2(-1.0, -1.0), // north west
+        vec2(0.0, -1.0),  // north
+        vec2(1.0, -1.0),  // north east
+        vec2(-1.0, 0.0),  // west
+        vec2(1.0, 0.0),   // east
+        vec2(-1.0, 1.0),  // south east
+        vec2(0.0, 1.0),   // south
+        vec2(1.0, 1.0),   // south west
+    ];
+
+    adjecent_vecs
+        .iter()
+        .map(|v| {
+            let pos = map.idx_to_vec2(idx).add(*v);
+            map.tile_at_pos(TilePos {
+                x: pos.x as u32,
+                y: pos.y as u32,
+            })
+        })
+        .collect()
+}
+pub fn surrounding_idxs(map: &Map, idx: usize) -> Vec<usize> {
+    let adjecent_vecs = vec![
+        vec2(-1.0, -1.0), // top left corner
+        vec2(0.0, -1.0),  // top center
+        vec2(1.0, -1.0),  // top right corner
+        vec2(-1.0, 0.0),  // left
+        vec2(1.0, 0.0),   // right
+        vec2(-1.0, 1.0),  // bottom left corner
+        vec2(0.0, 1.0),   // bottom center
+        vec2(1.0, 1.0),   // bottom right corner
+    ];
+
+    adjecent_vecs
+        .iter()
+        .map(|v| {
+            let pos = map.idx_to_vec2(idx).add(*v);
+            TilePos {
+                x: pos.x as u32,
+                y: pos.y as u32,
+            }
+            .to_index(&map.size)
+        })
+        .filter(|u| u < &map.tiles.len())
+        .collect()
+}
+
+pub fn adjecent_idxs(map: &Map, idx: usize) -> Vec<usize> {
+    let adjecent_vecs = vec![
+        vec2(0.0, -1.0), // north
+        vec2(-1.0, 0.0), // west
+        vec2(1.0, 0.0),  // east
+        vec2(0.0, 1.0),  // south
+    ];
+
+    adjecent_vecs
+        .iter()
+        .map(|v| {
+            let res = map.idx_to_vec2(idx).add(*v);
+
+            if res.x < 0.0
+                || res.y < 0.0
+                || res.x >= map.size.x as f32
+                || res.y >= map.size.y as f32
+            {
+                return None;
+            }
+
+            let res = TilePos {
+                x: res.x as u32,
+                y: res.y as u32,
+            };
+            Some(res.to_index(&map.size))
+        })
+        .filter(|t| t.is_some())
+        .map(|t| t.unwrap())
+        .collect()
+}
+
+pub fn get_wall_atlas_pos(
+    tiles: &Vec<CoarseTileType>,
+    surrounding: &Vec<usize>,
+) -> CaveAtlasIndices {
+    let matches = surrounding
+        .iter()
+        .map(|idx| tiles.get(*idx))
+        .map(|t| match t {
+            Some(CoarseTileType::Wall) => true,
+            _ => false,
+        })
+        .collect::<Vec<bool>>();
+
+    match matches[..] {
+        // end pieces
+        [_, false, _, true, false, _, false, _] => CaveAtlasIndices::Wall1Left,
+        [_, false, _, false, true, _, false, _] => CaveAtlasIndices::Wall1Right,
+        [_, false, _, false, false, _, true, _] => CaveAtlasIndices::Wall1Bottom,
+        [_, true, _, false, false, _, false, _] => CaveAtlasIndices::Wall1Top,
+        // connectors
+        [_, true, _, true, true, _, true, _] => CaveAtlasIndices::Wall1TopRightBottomLeft,
+        [_, true, _, false, false, _, true, _] => CaveAtlasIndices::Wall1TopBottom,
+        [_, false, _, true, true, _, false, _] => CaveAtlasIndices::Wall1RightLeft,
+        [_, false, _, true, true, _, true, _] => CaveAtlasIndices::Wall1RightBottomLeft,
+        [_, true, _, true, true, _, false, _] => CaveAtlasIndices::Wall1TopRightLeft,
+        [_, true, _, true, false, _, true, _] => CaveAtlasIndices::Wall1TopBottomLeft,
+        [_, true, _, false, true, _, true, _] => CaveAtlasIndices::Wall1TopRightBottom,
+        // corners
+        [_, false, _, false, true, _, true, _] => CaveAtlasIndices::Wall1RightBottom,
+        [_, false, _, true, false, _, true, _] => CaveAtlasIndices::Wall1BottomLeft,
+        [_, true, _, false, true, _, false, _] => CaveAtlasIndices::Wall1TopRight,
+        [_, true, _, true, false, _, false, _] => CaveAtlasIndices::Wall1TopLeft,
+        _ => CaveAtlasIndices::Floor1_1,
+    }
+}
+
+pub fn is_adjecent_to_room(map: &Map, idx: usize) -> bool {
+    let surrounding_tiles = surrounding_tiles(map, idx);
+
+    surrounding_tiles.iter().any(|t| match t {
+        Some(t) => is_room(t),
+        _ => false,
+    })
+}
+
+pub fn is_neighbourless_idx(map: &Map, idx: usize) -> bool {
+    !surrounding_tiles(&map, idx).iter().any(|t| match t {
+        Some(t) => is_room(t),
+        _ => false,
+    })
+}
+
+pub fn neighbourless_idxs(map: &Map) -> Vec<usize> {
+    let mut starting_points = Vec::new();
+    for (idx, tile) in map.tiles.iter().enumerate() {
+        if is_room(tile) {
+            continue;
+        }
+
+        let is_potential_start = is_neighbourless_idx(map, idx);
+
+        if is_potential_start {
+            starting_points.push(idx);
+        }
+    }
+
+    starting_points
 }
 
 pub fn generate_rooms(
@@ -160,5 +355,5 @@ pub fn cave(
                     .insert(coarse_type);
             }
         }
-    })
+    });
 }

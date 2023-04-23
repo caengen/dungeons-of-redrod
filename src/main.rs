@@ -15,7 +15,6 @@ use bevy_turborand::prelude::*;
 use config::Debug;
 use game::GamePlugin;
 use main_menu::*;
-use rand::Rng;
 use std::{env, process};
 
 mod config;
