@@ -50,7 +50,7 @@ pub fn move_players(
     for (player, mut transform, mut indices, mut sprite, mut timer) in player.iter_mut() {
         let (input, _) = inputs[player.handle];
         let direction = direction(input);
-        let move_speed = 1.0;
+        let move_speed = 2.0;
         let move_delta = (direction * move_speed).extend(0.0);
 
         if direction == Vec2::ZERO {
@@ -200,6 +200,15 @@ pub fn setup_level(
     let grid_size = tile_size.into();
     let map_type = TilemapType::default();
 
+    let mut rng = RngComponent::from(&mut global_rng);
+    levels::cave(
+        &mut rng,
+        &mut commands,
+        &tilemap_entity,
+        &map_size,
+        &tile_storage,
+    );
+
     commands.entity(tilemap_entity).insert(TilemapBundle {
         grid_size,
         map_type,
@@ -210,26 +219,6 @@ pub fn setup_level(
         transform: get_tilemap_center_transform(&map_size, &grid_size, &map_type, 0.0),
         ..Default::default()
     });
-
-    let mut rng = RngComponent::from(&mut global_rng);
-    levels::cave(&mut rng, &mut commands, &tilemap_entity, &map_size);
-
-    // // Spawn a 32 by 32 tilemap.
-    // // Alternatively, you can use helpers::fill_tilemap.
-    // for x in 0..map_size.x {
-    //     for y in 0..map_size.y {
-    //         let tile_pos = TilePos { x, y };
-    //         let tile_entity = commands
-    //             .spawn(TileBundle {
-    //                 position: tile_pos,
-    //                 tilemap_id: TilemapId(tilemap_entity),
-    //                 texture_index: TileTextureIndex(10),
-
-    //                 ..Default::default()
-    //             })
-    //             .id();
-    //     }
-    // }
 }
 
 pub fn teardown(mut commands: Commands, texts: Query<(Entity, With<ExampleGameText>)>) {

@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use bevy::{
     math::vec2,
     prelude::{Commands, Component, Entity, Local, ResMut, Vec2},
@@ -7,10 +5,12 @@ use bevy::{
 use bevy_ecs_tilemap::{
     helpers::square_grid::neighbors::{self, Neighbors},
     prelude::{TilemapId, TilemapSize},
-    tiles::{TileBundle, TilePos, TileTextureIndex},
+    tiles::{TileBundle, TilePos, TileStorage, TileTextureIndex},
     TilemapBundle,
 };
 use bevy_turborand::{DelegatedRng, GlobalRng, RngComponent};
+use std::ops::Add;
+use std::ops::Range;
 
 // rad 1 er 0 .. 22
 // rad 2 er 23 .. 45
@@ -51,7 +51,9 @@ pub enum CoarseTileType {
     Wall,
     Floor,
     Door,
+    Dirt,
 }
+#[derive(Component, Debug, Clone, PartialEq, Eq, derive_more::From)]
 pub enum CaveAtlasIndices {
     Wall1RightBottomLeft = 0,
     Wall1TopBottomLeft = 1,
@@ -325,12 +327,101 @@ pub fn generate_rooms(
     placed_rooms
 }
 
+/**
+ * Takes a room and a range of x and y values. For each x and y value it checks
+ *  if the tile at that the door_pos is "empty" and the tile at the other_room_pos
+ * is floor. If so it stores the index of the door_pos tile. Finally it returns at
+ * random one of the stored indices. If no doors were found it returns None.
+ */
+fn generate_doors(
+    rng: &mut RngComponent,
+    map: &mut Map,
+    room: &Room,
+    x_max: Range<u32>,
+    y_max: Range<u32>,
+    door_pos: Vec2,
+    other_room_pos: Vec2,
+) -> Option<usize> {
+    let mut group = Vec::new();
+    for x in x_max {
+        for y in y_max.clone() {
+            let door_lookup_pos = TilePos {
+                x: ((room.pos.x + x) as f32 + door_pos.x) as u32,
+                y: ((room.pos.y + y) as f32 + door_pos.y) as u32,
+            };
+            let maybe_door_tile = get_tile_at_pos(map, door_lookup_pos);
+            let maybe_other_room_tile = get_tile_at_pos(
+                map,
+                TilePos {
+                    x: ((room.pos.x + x) as f32 + other_room_pos.x) as u32,
+                    y: ((room.pos.y + y) as f32 + other_room_pos.y) as u32,
+                },
+            );
+            if maybe_door_tile.is_some() && maybe_other_room_tile.is_some() {
+                let tile_space = maybe_door_tile.unwrap();
+                let tile_maybe_connection = maybe_other_room_tile.unwrap();
+                if !is_room(tile_space) && is_room(tile_maybe_connection) {
+                    group.push(door_lookup_pos.to_index(&map.size));
+                }
+            }
+        }
+    }
+
+    if group.len() > 0 {
+        let chosen = rng.usize(0..group.len());
+        map.tiles[group[chosen]] = if rng.u32(0..10) >= 5 {
+            CoarseTileType::Door
+        } else {
+            CoarseTileType::Floor
+        };
+        Some(group[chosen])
+    } else {
+        None
+    }
+}
+
+fn dfs(rng: &mut RngComponent, map: &mut Map, visited: &mut Vec<usize>, idx: usize) {
+    if visited.len() > CORRIDOR_MAX_LENGTH {
+        return;
+    }
+    let mut adjecent = adjecent_idxs(map, idx);
+    if is_room(&map.tiles[idx]) || is_adjecent_to_room(map, idx) {
+        return;
+    } else {
+        visited.push(idx);
+    }
+
+    // shuffle the adjecent tiles so we don't always go in the same direction.
+    rng.shuffle(adjecent.as_mut_slice());
+    // adjecent.
+    for adj in adjecent.iter() {
+        if adj >= &map.tiles.len() || visited.contains(adj) {
+            continue;
+        }
+
+        let adjecent_to_any_visited = adjecent_idxs(map, *adj)
+            .iter()
+            .filter(|i| **i != idx)
+            .any(|i| visited.contains(i));
+        if !adjecent_to_any_visited && !is_adjecent_to_room(map, *adj) {
+            dfs(rng, map, visited, *adj)
+        }
+    }
+}
+
 pub fn cave(
     mut rng: &mut RngComponent,
     mut commands: &mut Commands,
     tilemap_entity: &Entity,
     map_size: &TilemapSize,
+    tile_storage: &TileStorage,
 ) {
+    let mut map = Map {
+        size: map_size.clone(),
+        tiles: vec![CoarseTileType::Dirt; map_size.x as usize * map_size.y as usize],
+    };
+
+    // place rooms
     let amount = rng.usize(8..12);
     let rooms = generate_rooms(&mut rng, amount, map_size);
     rooms.iter().for_each(|r| {
@@ -345,14 +436,173 @@ pub fn cave(
 
                 let position = TilePos::new(r.pos.x + x, r.pos.y + y);
                 let idx = position.to_index(map_size);
-                let tile_entity = commands
+                commands
                     .spawn(TileBundle {
                         position,
                         tilemap_id: TilemapId(*tilemap_entity),
                         texture_index: TileTextureIndex(0),
                         ..Default::default()
                     })
-                    .insert(coarse_type);
+                    .insert(coarse_type.clone());
+                map.tiles[idx] = coarse_type;
+            }
+        }
+    });
+
+    // place corridors
+    let starting_points = neighbourless_idxs(&map);
+    let mut corridors = Vec::new();
+    for start in starting_points.iter() {
+        let mut visited: Vec<usize> = Vec::new();
+        dfs(rng, &mut map, &mut visited, *start);
+        // println!("Visited {:?}", visited);
+        visited.iter().for_each(|v| {
+            map.tiles[*v] = CoarseTileType::Floor;
+        });
+        corridors.push(visited);
+    }
+
+    let mut doors = Vec::new();
+    // group possible doors by room edge and pick one for each edge of each room
+    rooms.iter().for_each(|r| {
+        let w = r.size.x as u32;
+        let h = r.size.y as u32;
+
+        // traverse bottom
+        doors.push(generate_doors(
+            rng,
+            &mut map,
+            r,
+            0..w,
+            0..1,
+            vec2(0.0, -1.0),
+            vec2(0.0, -2.0),
+        ));
+        // traverse top
+        doors.push(generate_doors(
+            rng,
+            &mut map,
+            r,
+            0..w,
+            h..(h + 1),
+            vec2(0.0, 1.0),
+            vec2(0.0, 2.0),
+        ));
+        // traverse left
+        doors.push(generate_doors(
+            rng,
+            &mut map,
+            r,
+            0..1,
+            0..h,
+            vec2(-1.0, 0.0),
+            vec2(-2.0, 0.0),
+        ));
+        // traverse right
+        doors.push(generate_doors(
+            rng,
+            &mut map,
+            r,
+            w..(w + 1),
+            0..h,
+            vec2(1.0, 0.0),
+            vec2(2.0, 0.0),
+        ));
+    });
+    let doors = doors
+        .iter()
+        .filter(|d| d.is_some())
+        .map(|d| d.unwrap())
+        .collect::<Vec<usize>>();
+
+    // remove dead ends and non-connected corridors
+    for corridor in corridors.iter() {
+        let adjacents = corridor
+            .iter()
+            .map(|c| adjecent_idxs(&map, *c))
+            .flatten()
+            .collect::<Vec<usize>>();
+        if adjacents.iter().any(|a| doors.contains(&a)) {
+            continue;
+        }
+
+        for c in corridor.iter() {
+            let position = map.idx_to_vec2(*c);
+            let position = TilePos {
+                x: position.x as u32,
+                y: position.y as u32,
+            };
+            map.tiles[*c] = CoarseTileType::Dirt;
+            commands
+                .spawn(TileBundle {
+                    position,
+                    tilemap_id: TilemapId(*tilemap_entity),
+                    texture_index: TileTextureIndex(0),
+                    ..Default::default()
+                })
+                .insert(CoarseTileType::Dirt);
+        }
+    }
+
+    // add walls
+    let mut walls = Vec::new();
+    for (idx, tile) in map.tiles.iter().enumerate() {
+        if !is_floor(tile) {
+            continue;
+        }
+
+        let surrounding = surrounding_idxs(&map, idx);
+        for s in surrounding.iter() {
+            if &map.tiles[*s] == &CoarseTileType::Dirt {
+                walls.push(*s);
+            }
+        }
+    }
+
+    walls.iter().for_each(|w| {
+        let position = map.idx_to_vec2(*w);
+        let position = TilePos {
+            x: position.x as u32,
+            y: position.y as u32,
+        };
+        map.tiles[*w] = CoarseTileType::Wall;
+        commands
+            .spawn(TileBundle {
+                position,
+                tilemap_id: TilemapId(*tilemap_entity),
+                texture_index: TileTextureIndex(0),
+                ..Default::default()
+            })
+            .insert(CoarseTileType::Dirt);
+    });
+
+    map.tiles.iter().enumerate().for_each(|(idx, t)| {
+        let position = map.idx_to_vec2(idx);
+        let position = TilePos {
+            x: position.x as u32,
+            y: position.y as u32,
+        };
+
+        let entity_id = tile_storage.get(&position);
+        if let Some(entity_id) = entity_id {
+            let mut entity = commands.entity(entity_id);
+            match t {
+                // .insert(TileTextureIndex(color));
+                CoarseTileType::Wall => {
+                    let surrounding = surrounding_idxs(&map, idx);
+                    let texture_index = get_wall_atlas_pos(&map.tiles, &surrounding);
+                    entity.insert(TileTextureIndex(texture_index as u32));
+                }
+                CoarseTileType::Floor => {
+                    entity.insert(TileTextureIndex(CaveAtlasIndices::Floor1_1 as u32));
+                }
+                CoarseTileType::Door => {
+                    entity.insert(TileTextureIndex(CaveAtlasIndices::Wall1Gate as u32));
+                }
+                CoarseTileType::Dirt => {
+                    entity.insert(TileTextureIndex(CaveAtlasIndices::Floor2_1 as u32));
+                }
+                _ => {}
             }
         }
     });
