@@ -77,8 +77,8 @@ fn main() {
                 ..default()
             })
             .set(LogPlugin {
-                level: Level::DEBUG,
-                filter: "wgpu=error,bevy_render=info,bevy_ecs=trace".to_string(),
+                level: Level::ERROR,
+                filter: "game=info".to_string(), //wgpu=error,bevy_render=info,bevy_ecs=trace
             })
             .set(ImagePlugin::default_nearest()),
     )
@@ -104,7 +104,7 @@ fn main() {
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle {
         camera_2d: Camera2d {
-            clear_color: ClearColorConfig::Custom(DARK),
+            clear_color: ClearColorConfig::Default,
         },
         ..default()
     });

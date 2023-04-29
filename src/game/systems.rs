@@ -179,7 +179,7 @@ pub fn setup_level(
     mut global_rng: ResMut<GlobalRng>,
 ) {
     // Size of the tile map in tiles.
-    let map_size = TilemapSize { x: 32, y: 32 };
+    let map_size = TilemapSize { x: 64, y: 64 };
 
     // To create a map we use the TileStorage component.
     // This component is a grid of tile entities and is used to help keep track of individual
@@ -206,7 +206,7 @@ pub fn setup_level(
         &mut commands,
         &tilemap_entity,
         &map_size,
-        &tile_storage,
+        &mut tile_storage,
     );
 
     commands.entity(tilemap_entity).insert(TilemapBundle {

@@ -1,6 +1,6 @@
 use bevy::{
     math::vec2,
-    prelude::{Commands, Component, Entity, Local, ResMut, Vec2},
+    prelude::{error, Commands, Component, Entity, Local, ResMut, Vec2},
 };
 use bevy_ecs_tilemap::{
     helpers::square_grid::neighbors::{self, Neighbors},
@@ -169,14 +169,14 @@ pub fn surrounding_tiles(map: &Map, idx: usize) -> Vec<Option<&CoarseTileType>> 
 }
 pub fn surrounding_idxs(map: &Map, idx: usize) -> Vec<usize> {
     let adjecent_vecs = vec![
-        vec2(-1.0, -1.0), // top left corner
-        vec2(0.0, -1.0),  // top center
-        vec2(1.0, -1.0),  // top right corner
-        vec2(-1.0, 0.0),  // left
-        vec2(1.0, 0.0),   // right
         vec2(-1.0, 1.0),  // bottom left corner
         vec2(0.0, 1.0),   // bottom center
         vec2(1.0, 1.0),   // bottom right corner
+        vec2(-1.0, 0.0),  // left
+        vec2(1.0, 0.0),   // right
+        vec2(-1.0, -1.0), // top left corner
+        vec2(0.0, -1.0),  // top center
+        vec2(1.0, -1.0),  // top right corner
     ];
 
     adjecent_vecs
@@ -414,7 +414,7 @@ pub fn cave(
     mut commands: &mut Commands,
     tilemap_entity: &Entity,
     map_size: &TilemapSize,
-    tile_storage: &TileStorage,
+    tile_storage: &mut TileStorage,
 ) {
     let mut map = Map {
         size: map_size.clone(),
@@ -436,14 +436,16 @@ pub fn cave(
 
                 let position = TilePos::new(r.pos.x + x, r.pos.y + y);
                 let idx = position.to_index(map_size);
-                commands
+                let tile_entity = commands
                     .spawn(TileBundle {
                         position,
                         tilemap_id: TilemapId(*tilemap_entity),
                         texture_index: TileTextureIndex(0),
                         ..Default::default()
                     })
-                    .insert(coarse_type.clone());
+                    .insert(coarse_type.clone())
+                    .id();
+                tile_storage.set(&position, tile_entity);
                 map.tiles[idx] = coarse_type;
             }
         }
@@ -532,15 +534,17 @@ pub fn cave(
                 x: position.x as u32,
                 y: position.y as u32,
             };
-            map.tiles[*c] = CoarseTileType::Dirt;
-            commands
+            let tile_entity = commands
                 .spawn(TileBundle {
                     position,
                     tilemap_id: TilemapId(*tilemap_entity),
                     texture_index: TileTextureIndex(0),
                     ..Default::default()
                 })
-                .insert(CoarseTileType::Dirt);
+                .insert(CoarseTileType::Dirt)
+                .id();
+            tile_storage.set(&position, tile_entity);
+            map.tiles[*c] = CoarseTileType::Dirt;
         }
     }
 
@@ -566,14 +570,16 @@ pub fn cave(
             y: position.y as u32,
         };
         map.tiles[*w] = CoarseTileType::Wall;
-        commands
+        let tile_entity = commands
             .spawn(TileBundle {
                 position,
                 tilemap_id: TilemapId(*tilemap_entity),
                 texture_index: TileTextureIndex(0),
                 ..Default::default()
             })
-            .insert(CoarseTileType::Dirt);
+            .insert(CoarseTileType::Wall)
+            .id();
+        tile_storage.set(&position, tile_entity);
     });
 
     map.tiles.iter().enumerate().for_each(|(idx, t)| {
@@ -602,7 +608,9 @@ pub fn cave(
                 CoarseTileType::Dirt => {
                     entity.insert(TileTextureIndex(CaveAtlasIndices::Floor2_1 as u32));
                 }
-                _ => {}
+                _ => {
+                    error!("Unknown tile type");
+                }
             }
         }
     });
