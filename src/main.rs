@@ -104,7 +104,7 @@ fn main() {
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle {
         camera_2d: Camera2d {
-            clear_color: ClearColorConfig::Default,
+            clear_color: ClearColorConfig::Custom(DARK),
         },
         ..default()
     });

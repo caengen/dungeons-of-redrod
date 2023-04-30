@@ -1,11 +1,11 @@
 use bevy::{
     math::vec2,
-    prelude::{error, Commands, Component, Entity, Local, ResMut, Vec2},
+    prelude::{error, Color, Commands, Component, Entity, Local, ResMut, Vec2},
 };
 use bevy_ecs_tilemap::{
     helpers::square_grid::neighbors::{self, Neighbors},
     prelude::{TilemapId, TilemapSize},
-    tiles::{TileBundle, TilePos, TileStorage, TileTextureIndex},
+    tiles::{TileBundle, TileColor, TilePos, TileStorage, TileTextureIndex},
     TilemapBundle,
 };
 use bevy_turborand::{DelegatedRng, GlobalRng, RngComponent};
@@ -73,12 +73,16 @@ pub enum CaveAtlasIndices {
     Wall1Gate = 51,
     Wall1Rubble1 = 28,
     Wall1Rubble2 = 29,
-    Floor1_1 = 8,
-    Floor2_1 = 9,
-    Floor2_2 = 31,
-    Floor1_2 = 32,
-    Floor1_3 = 54,
-    Floor2_3 = 55,
+    CaveFloor1_d = 8,
+    CaveFloor1_r = 9,
+    CaveFloor2_r = 31,
+    CaveFloor2_d = 32,
+    CaveFloor3_d = 54,
+    CaveFloor3_r = 55,
+    CaveFloor4_r = 77,
+    CaveFloor4_d = 78,
+    CaveFloor5_d = 100,
+    CaveFloor5_r = 101,
 }
 
 const ROOM_GENERATION_ATTEMPTS: i32 = 50;
@@ -257,7 +261,7 @@ pub fn get_wall_atlas_pos(
         [_, false, _, true, false, _, true, _] => CaveAtlasIndices::Wall1BottomLeft,
         [_, true, _, false, true, _, false, _] => CaveAtlasIndices::Wall1TopRight,
         [_, true, _, true, false, _, false, _] => CaveAtlasIndices::Wall1TopLeft,
-        _ => CaveAtlasIndices::Floor1_1,
+        _ => CaveAtlasIndices::CaveFloor1_d,
     }
 }
 
@@ -430,22 +434,21 @@ pub fn cave(
         for x in 0..=w {
             for y in 0..=h {
                 let coarse_type = match (x, y) {
-                    _ if x == 0 || x == w || y == 0 || y == h => CoarseTileType::Floor,
+                    _ if x == 0 || x == w || y == 0 || y == h => CoarseTileType::Floor, // maybe place walls here?
                     _ => CoarseTileType::Floor,
                 };
 
                 let position = TilePos::new(r.pos.x + x, r.pos.y + y);
                 let idx = position.to_index(map_size);
-                let tile_entity = commands
-                    .spawn(TileBundle {
-                        position,
-                        tilemap_id: TilemapId(*tilemap_entity),
-                        texture_index: TileTextureIndex(0),
-                        ..Default::default()
-                    })
-                    .insert(coarse_type.clone())
-                    .id();
-                tile_storage.set(&position, tile_entity);
+                // let tile_entity = commands
+                //     .spawn(TileBundle {
+                //         position,
+                //         tilemap_id: TilemapId(*tilemap_entity),
+                //         texture_index: TileTextureIndex(0),
+                //         ..Default::default()
+                //     })
+                //     .id();
+                // tile_storage.set(&position, tile_entity);
                 map.tiles[idx] = coarse_type;
             }
         }
@@ -516,6 +519,7 @@ pub fn cave(
         .filter(|d| d.is_some())
         .map(|d| d.unwrap())
         .collect::<Vec<usize>>();
+    error!("Created doors {:?}", doors);
 
     // remove dead ends and non-connected corridors
     for corridor in corridors.iter() {
@@ -529,21 +533,21 @@ pub fn cave(
         }
 
         for c in corridor.iter() {
-            let position = map.idx_to_vec2(*c);
-            let position = TilePos {
-                x: position.x as u32,
-                y: position.y as u32,
-            };
-            let tile_entity = commands
-                .spawn(TileBundle {
-                    position,
-                    tilemap_id: TilemapId(*tilemap_entity),
-                    texture_index: TileTextureIndex(0),
-                    ..Default::default()
-                })
-                .insert(CoarseTileType::Dirt)
-                .id();
-            tile_storage.set(&position, tile_entity);
+            // let position = map.idx_to_vec2(*c);
+            // let position = TilePos {
+            //     x: position.x as u32,
+            //     y: position.y as u32,
+            // };
+            // let tile_entity = commands
+            //     .spawn(TileBundle {
+            //         position,
+            //         tilemap_id: TilemapId(*tilemap_entity),
+            //         texture_index: TileTextureIndex(0),
+            //         ..Default::default()
+            //     })
+            //     .insert(CoarseTileType::Dirt)
+            //     .id();
+            // tile_storage.set(&position, tile_entity);
             map.tiles[*c] = CoarseTileType::Dirt;
         }
     }
@@ -570,16 +574,17 @@ pub fn cave(
             y: position.y as u32,
         };
         map.tiles[*w] = CoarseTileType::Wall;
-        let tile_entity = commands
-            .spawn(TileBundle {
-                position,
-                tilemap_id: TilemapId(*tilemap_entity),
-                texture_index: TileTextureIndex(0),
-                ..Default::default()
-            })
-            .insert(CoarseTileType::Wall)
-            .id();
-        tile_storage.set(&position, tile_entity);
+        // let tile_entity = commands
+        //     .spawn(TileBundle {
+        //         position,
+        //         tilemap_id: TilemapId(*tilemap_entity),
+        //         texture_index: TileTextureIndex(0),
+        //         color: TileColor(Color::rgb(0.5, 0.5, 0.5)),
+        //         ..Default::default()
+        //     })
+        //     .insert(CoarseTileType::Wall)
+        //     .id();
+        // tile_storage.set(&position, tile_entity);
     });
 
     map.tiles.iter().enumerate().for_each(|(idx, t)| {
@@ -589,29 +594,63 @@ pub fn cave(
             y: position.y as u32,
         };
 
-        let entity_id = tile_storage.get(&position);
-        if let Some(entity_id) = entity_id {
-            let mut entity = commands.entity(entity_id);
-            match t {
-                // .insert(TileTextureIndex(color));
-                CoarseTileType::Wall => {
-                    let surrounding = surrounding_idxs(&map, idx);
-                    let texture_index = get_wall_atlas_pos(&map.tiles, &surrounding);
-                    entity.insert(TileTextureIndex(texture_index as u32));
-                }
-                CoarseTileType::Floor => {
-                    entity.insert(TileTextureIndex(CaveAtlasIndices::Floor1_1 as u32));
-                }
-                CoarseTileType::Door => {
-                    entity.insert(TileTextureIndex(CaveAtlasIndices::Wall1Gate as u32));
-                }
-                CoarseTileType::Dirt => {
-                    entity.insert(TileTextureIndex(CaveAtlasIndices::Floor2_1 as u32));
-                }
-                _ => {
-                    error!("Unknown tile type");
-                }
+        // let entity_id = tile_storage.get(&position);
+        // if let Some(entity_id) = entity_id {
+        // let mut entity = commands.entity(entity_id);
+        match t {
+            // .insert(TileTextureIndex(color));
+            CoarseTileType::Wall => {
+                let surrounding = surrounding_idxs(&map, idx);
+                let texture_index = get_wall_atlas_pos(&map.tiles, &surrounding);
+                // entity.insert(TileTextureIndex(texture_index as u32));
+                let tile_entity = commands
+                    .spawn(TileBundle {
+                        position,
+                        tilemap_id: TilemapId(*tilemap_entity),
+                        texture_index: TileTextureIndex(texture_index as u32),
+                        ..Default::default()
+                    })
+                    .id();
+                tile_storage.set(&position, tile_entity);
+            }
+            CoarseTileType::Floor => {
+                let tile_entity = commands
+                    .spawn(TileBundle {
+                        position,
+                        tilemap_id: TilemapId(*tilemap_entity),
+                        texture_index: TileTextureIndex(CaveAtlasIndices::CaveFloor1_d as u32),
+                        ..Default::default()
+                    })
+                    .id();
+                tile_storage.set(&position, tile_entity);
+            }
+            CoarseTileType::Door => {
+                let tile_entity = commands
+                    .spawn(TileBundle {
+                        position,
+                        tilemap_id: TilemapId(*tilemap_entity),
+                        texture_index: TileTextureIndex(CaveAtlasIndices::Wall1Gate as u32),
+                        ..Default::default()
+                    })
+                    .id();
+                tile_storage.set(&position, tile_entity);
+            }
+            CoarseTileType::Dirt => {
+                let tile_entity = commands
+                    .spawn(TileBundle {
+                        position,
+                        tilemap_id: TilemapId(*tilemap_entity),
+                        texture_index: TileTextureIndex(CaveAtlasIndices::CaveFloor5_d as u32),
+                        color: TileColor(Color::rgb(0.0, 0.0, 0.0)),
+                        ..Default::default()
+                    })
+                    .id();
+                tile_storage.set(&position, tile_entity);
+            }
+            _ => {
+                error!("Unknown tile type");
             }
         }
+        // }
     });
 }
